@@ -1,31 +1,3 @@
-"""
-Cross-Basin Himalayan Streamflow Prediction Benchmark:
-
-Benchmarks three modeling paradigms trained strictly on the Karnali River Basin
-(2020-2023) and evaluated under three progressively harder regimes:
-
-  1. Temporal Holdout (In-Basin)     : Karnali Basin (2024)
-  2. Zero-Shot Cross-Basin (Large)   : Koshi Basin (2020-2024, 54,100 km2)
-  3. Zero-Shot Cross-Basin (Small)   : Babai Basin (2020-2024,  2,570 km2)
-
-Models Benchmarked:
-
-  1. Random Forest Regressor  (Tabular ML baseline with multi-scale rolling features)
-  2. Temporal Transformer     (Pure data-driven self-attention sequence model)
-  3. Hydro-PINN               (Physics-Informed Neural Network with learnable
-                               water-balance & dry-spell recession constraints)
-
-Artifacts Generated in ./results/:
-
-  - metrics_summary.csv               (Full numerical benchmark table)
-  - RESULTS_TABLE.md                  (Ready-to-paste Markdown table for GitHub README)
-  - fig1_metric_comparison.png        (NSE, KGE, Flood F1, Flood Recall across basins)
-  - fig2_hydrographs_2024.png         (2024 daily hydrographs + monsoon & Q90 flood line)
-  - fig3_scatter_diagnostics.png      (3x3 Observed vs. Predicted scatter + 1:1 line)
-  - fig4_flood_detection_cm.png       (Zero-shot Q90 flood confusion matrices)
-  - fig5_training_convergence.png     (Data MSE & Hydro-PINN physics loss curves)
-"""
-
 from __future__ import annotations
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
@@ -59,10 +31,7 @@ import matplotlib
 # Non-interactive backend for clean, non-blocking saves in VS Code
 matplotlib.use("Agg")
 
-
-# =============================================================================
 # 1. CONFIGURATION & CONSTANTS
-# =============================================================================
 
 @dataclass(frozen=True)
 class Config:
@@ -119,12 +88,12 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-# =============================================================================
 # 2. DATA LOADING & FEATURE ENGINEERING
-# =============================================================================
 
 def load_basin_data(csv_path: str) -> pd.DataFrame:
-    """Loads a basin CSV, cleans any minor gaps, and encodes monsoon seasonality."""
+  
+    """For loading a basin CSV, clean any minor gaps, and encodes the monsoon seasonality."""
+  
     if not os.path.exists(csv_path):
         raise FileNotFoundError(
             f"Missing '{csv_path}'. Please run datas.py first in this folder."
@@ -142,10 +111,12 @@ def load_basin_data(csv_path: str) -> pd.DataFrame:
 
 
 def build_tabular_features(df: pd.DataFrame) -> pd.DataFrame:
+  
     """
-    Constructs multi-scale rolling hydrometeorological features (3d, 7d, 15d, 30d)
+    This constructs a multi-scale rolling hydrometeorological features (3d, 7d, 15d, 30d)
     for Random Forest so it uses the exact same 30-day memory horizon as deep models.
     """
+  
     feats = df[FEATURE_COLS].copy()
     for w in (3, 7, 15, 30):
         feats[f"rain_sum_{w}d"] = df["rainfall_mm"].rolling(w).sum()
@@ -165,10 +136,12 @@ def build_sequences(
     scaler: StandardScaler,
     seq_len: int,
 ) -> Dict[str, np.ndarray]:
+  
     """
-    Builds aligned 30-day input windows for sequence models plus raw unscaled
+    It builds an aligned 30-day input windows for sequence models plus raw unscaled
     physical forcings [rain, temp, ET, soil_moisture] for the Hydro-PINN physics loss.
     """
+  
     x_scaled = scaler.transform(df[FEATURE_COLS].values)
     y_specific = df[TARGET_COL].values.astype(np.float32)
     q_cumecs = df["streamflow_cumecs"].values.astype(np.float32)
@@ -198,13 +171,13 @@ def build_sequences(
 
 
 def specific_to_cumecs(q_mm: np.ndarray, area_km2: float) -> np.ndarray:
+  
     """Converts specific runoff (mm/day) back to physical river discharge (m3/s)."""
+  
     return np.maximum(0.0, q_mm) * area_km2 / 86.4
 
 
-# =============================================================================
 # 3. NEURAL ARCHITECTURES (TRANSFORMER & HYDRO-PINN)
-# =============================================================================
 
 class PositionalEncoding(nn.Module):
     """Sinusoidal positional encoding for temporal sequence order awareness."""
@@ -348,9 +321,7 @@ class HydroPINN(nn.Module):
         return loss_wb, loss_recession
 
 
-# =============================================================================
 # 4. HYDROLOGICAL & FLOOD-DETECTION EVALUATION METRICS
-# =============================================================================
 
 def compute_nse(obs: np.ndarray, pred: np.ndarray) -> float:
     """Nash-Sutcliffe Efficiency (1.0 = perfect, 0.0 = mean baseline)."""
@@ -404,9 +375,7 @@ def evaluate_predictions(
     }
 
 
-# =============================================================================
 # 5. TRAINING & INFERENCE ROUTINES
-# =============================================================================
 
 def train_transformer(
     X_train: np.ndarray,
@@ -570,9 +539,7 @@ def predict_torch(
     return np.concatenate(preds, axis=0)
 
 
-# =============================================================================
-# 6. PUBLICATION-QUALITY VISUALIZATIONS & REPORT EXPORT
-# =============================================================================
+# 6. VISUALIZATIONS & REPORT 
 
 def setup_plot_style() -> None:
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.15)
@@ -639,7 +606,9 @@ def plot_metric_comparison(metrics_df: pd.DataFrame, out_dir: str) -> None:
 def plot_hydrographs_2024(
     eval_store: Dict[str, Dict[str, np.ndarray]], out_dir: str
 ) -> None:
+  
     """Figure 2: 2024 Daily Streamflow Hydrographs with Monsoon & Q90 Threshold."""
+  
     fig, axes = plt.subplots(3, 1, figsize=(14, 11), sharex=False)
 
     for ax, (basin_label, data) in zip(axes, eval_store.items()):
@@ -691,7 +660,9 @@ def plot_hydrographs_2024(
 
     axes[-1].set_xlabel("Date (2024)")
     fig.suptitle(
+      
         "Observed vs. Predicted Himalayan River Hydrographs (Zero-Shot Cross-Basin Transfer)",
+      
         fontsize=14,
         fontweight="bold",
         y=0.99,
@@ -705,7 +676,9 @@ def plot_hydrographs_2024(
 def plot_scatter_diagnostics(
     eval_store: Dict[str, Dict[str, np.ndarray]], out_dir: str
 ) -> None:
+  
     """Figure 3: Observed vs. Predicted 3x3 scatter diagnostics with 1:1 line."""
+  
     basin_names = list(eval_store.keys())
     model_names = ["Random Forest", "Transformer", "Hydro-PINN"]
     fig, axes = plt.subplots(len(basin_names), len(
@@ -757,7 +730,9 @@ def plot_scatter_diagnostics(
 def plot_flood_detection_cm(
     eval_store: Dict[str, Dict[str, np.ndarray]], out_dir: str
 ) -> None:
+  
     """Figure 4: Confusion matrices for Zero-Shot High-Flow Flood Detection (Q >= Q90)."""
+  
     unseen_basins = [k for k in eval_store.keys() if "Karnali" not in k]
     model_names = ["Random Forest", "Transformer", "Hydro-PINN"]
     fig, axes = plt.subplots(len(unseen_basins), len(
@@ -813,7 +788,9 @@ def plot_training_convergence(
     pinn_hist: Dict[str, List[float]],
     out_dir: str,
 ) -> None:
+  
     """Figure 5: Optimization convergence for Transformer and Hydro-PINN."""
+  
     fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.5))
     tf_ep = np.arange(1, len(tf_hist["train_loss"]) + 1)
     pinn_ep = np.arange(1, len(pinn_hist["train_data_loss"]) + 1)
@@ -897,9 +874,7 @@ def export_markdown_report(
         f.write("\n".join(lines) + "\n")
 
 
-# =============================================================================
 # 7. MAIN EXECUTION PIPELINE
-# =============================================================================
 
 def main() -> None:
     t0 = time.time()
@@ -960,7 +935,7 @@ def main() -> None:
         f"Babai Zero-Shot Test (2020-24): {len(seq_babai['y_specific'])} days")
     print("-" * 80)
 
-    # 4. Train Model 1: Random Forest
+    # 4. Training Model 1: Random Forest
     print("[1/3] Training Random Forest Regressor...")
     rf_model = RandomForestRegressor(
         n_estimators=300,
@@ -971,11 +946,11 @@ def main() -> None:
     )
     rf_model.fit(X_rf_tr, y_tr)
 
-    # 5. Train Model 2: Temporal Transformer
+    # 5. Training Model 2: Temporal Transformer
     print("[2/3] Training Temporal Transformer...")
     tf_model, tf_hist = train_transformer(X_tr, y_tr, X_val, y_val, device)
 
-    # 6. Train Model 3: Hydro-PINN
+    # 6. Training Model 3: Hydro-PINN
     print("[3/3] Training Hydro-PINN (Water-Balance + Recession Physics)...")
     pinn_model, pinn_hist = train_hydro_pinn(
         X_tr, P_tr, y_tr, X_val, y_val, device)
@@ -984,7 +959,7 @@ def main() -> None:
     for k, v in pinn_model.physics_params.items():
         print(f"  - {k}: {v:.4f}")
 
-    # 7. Evaluate across In-Basin & Zero-Shot Cross-Basin regimes
+    # 7. Evaluating across In-Basin & Zero-Shot Cross-Basin regimes
     eval_configs = [
         (
             "Karnali (In-Basin 2024)",
@@ -1045,7 +1020,7 @@ def main() -> None:
     export_markdown_report(
         metrics_df, pinn_model.physics_params, CFG.output_dir)
 
-    # 8. Print formatted results table
+    # 8. Prints formatted results table
     print("\n" + "=" * 80)
     print("BENCHMARK RESULTS SUMMARY")
     print("=" * 80)
@@ -1056,7 +1031,7 @@ def main() -> None:
     print(metrics_df[show_cols].to_string(
         index=False, float_format=lambda x: f"{x:.3f}"))
 
-    # 9. Save all 5 publication-quality figures
+    # 9. Save the figures
     print("\nGenerating publication-ready figures in ./results/ ...")
     plot_metric_comparison(metrics_df, CFG.output_dir)
     plot_hydrographs_2024(eval_store, CFG.output_dir)
